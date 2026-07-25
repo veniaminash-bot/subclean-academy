@@ -1,17 +1,32 @@
--- SUBCLEAN Academy — схема базы данных для Supabase
--- Выполнить целиком один раз в Supabase: SQL Editor -> New query -> вставить -> Run
+-- SUBCLEAN Academy — схема базы данных для Supabase (версия 2)
+-- Безопасно выполнять повторно поверх существующей базы: SQL Editor -> вставить -> Run
+-- В этой версии пароли хранятся открытым текстом, чтобы администратор мог их видеть
+-- и редактировать в панели. Это внутренний учебный портал, не сервис с секретными данными.
 
-create extension if not exists pgcrypto;
+create extension if not exists pgcrypto with schema extensions;
 
 -- ---------- Таблицы ----------
 
 create table if not exists app_users (
   id uuid primary key default gen_random_uuid(),
   login text unique not null,
-  password_hash text not null,
+  password text,
+  password_hash text,
   role text not null check (role in ('admin','viewer')),
   created_at timestamptz default now()
 );
+
+-- Миграция со старой версии (где был только password_hash):
+alter table app_users add column if not exists password text;
+alter table app_users alter column password_hash drop not null;
+
+-- Восстановить открытые пароли для стандартных аккаунтов, если они ещё стандартные:
+update app_users set password = 'SUBCLEAN'
+  where login = 'VENIAMIN' and password is null
+    and password_hash is not null and password_hash = extensions.crypt('SUBCLEAN', password_hash);
+update app_users set password = 'test'
+  where login = 'test' and password is null
+    and password_hash is not null and password_hash = extensions.crypt('test', password_hash);
 
 create table if not exists app_sessions (
   token uuid primary key default gen_random_uuid(),
@@ -39,27 +54,19 @@ create table if not exists app_progress (
   updated_at timestamptz default now()
 );
 
--- ---------- Блокируем прямой доступ к таблицам ----------
--- Весь доступ идёт только через функции ниже (SECURITY DEFINER).
--- RLS включена, политик не задаём -> прямые запросы к таблицам через API запрещены.
-
 alter table app_users enable row level security;
 alter table app_sessions enable row level security;
 alter table app_content enable row level security;
 alter table app_progress enable row level security;
 
 -- ---------- Стартовые учётные записи ----------
--- Логин администратора: VENIAMIN / пароль: SUBCLEAN
--- Логин клинера: test / пароль: test
--- Пароли и роли можно позже поменять из панели администратора на сайте.
-
-insert into app_users (login, password_hash, role)
+insert into app_users (login, password, role)
 values
-  ('VENIAMIN', crypt('SUBCLEAN', gen_salt('bf')), 'admin'),
-  ('test', crypt('test', gen_salt('bf')), 'viewer')
+  ('VENIAMIN', 'SUBCLEAN', 'admin'),
+  ('test', 'test', 'viewer')
 on conflict (login) do nothing;
 
--- ---------- Служебная функция: проверка токена администратора ----------
+-- ---------- Проверка токена администратора ----------
 
 create or replace function require_admin(p_token uuid)
 returns uuid
@@ -79,6 +86,8 @@ end;
 $$;
 
 -- ---------- Вход ----------
+-- Логин проходит по открытому паролю; для аккаунтов, оставшихся со старой версии
+-- (только хеш), вход также работает по хешу — чтобы никого не заблокировать.
 
 create or replace function app_login(p_login text, p_password text)
 returns table(token uuid, role text, login text)
@@ -91,7 +100,13 @@ declare
   t uuid;
 begin
   select * into u from app_users where lower(app_users.login) = lower(p_login);
-  if not found or u.password_hash <> crypt(p_password, u.password_hash) then
+  if not found then
+    raise exception 'invalid_credentials';
+  end if;
+  if not (
+    (u.password is not null and u.password = p_password)
+    or (u.password_hash is not null and u.password_hash = crypt(p_password, u.password_hash))
+  ) then
     raise exception 'invalid_credentials';
   end if;
   insert into app_sessions(user_id, login, role) values (u.id, u.login, u.role)
@@ -110,8 +125,6 @@ as $$
 $$;
 
 -- ---------- Контент (модули + тест) ----------
--- Чтение доступно всем (это учебный текст, не секрет).
--- Запись — только администратору.
 
 create or replace function get_content()
 returns table(edits jsonb, quiz jsonb)
@@ -135,16 +148,22 @@ end;
 $$;
 
 -- ---------- Пользователи (только администратор) ----------
+-- list_users теперь возвращает открытый пароль и прогресс обучения каждого сотрудника.
 
+drop function if exists list_users(uuid);
 create or replace function list_users(p_token uuid)
-returns table(login text, role text)
+returns table(login text, role text, password text, completed jsonb)
 language plpgsql
 security definer
 set search_path = public
 as $$
 begin
   perform require_admin(p_token);
-  return query select app_users.login, app_users.role from app_users order by app_users.login;
+  return query
+    select u.login, u.role, u.password, coalesce(p.completed, '[]'::jsonb)
+    from app_users u
+    left join app_progress p on p.user_id = u.id
+    order by (u.role = 'admin') desc, u.login;
 end;
 $$;
 
@@ -152,7 +171,7 @@ create or replace function create_user(p_token uuid, p_login text, p_password te
 returns void
 language plpgsql
 security definer
-set search_path = public, extensions
+set search_path = public
 as $$
 begin
   perform require_admin(p_token);
@@ -168,17 +187,18 @@ begin
   if exists (select 1 from app_users where lower(login) = lower(p_login)) then
     raise exception 'login_taken';
   end if;
-  insert into app_users(login, password_hash, role) values (p_login, crypt(p_password, gen_salt('bf')), p_role);
+  insert into app_users(login, password, password_hash, role)
+    values (p_login, p_password, null, p_role);
 end;
 $$;
 
--- Обновление существующего пользователя: переименование логина, смена роли,
--- и (опционально) смена пароля. Если p_password пуст/NULL — пароль не меняется.
+-- Обновление: переименование логина, смена роли и (опционально) смена пароля.
+-- Если p_password пуст/NULL — пароль не меняется.
 create or replace function update_user(p_token uuid, p_old_login text, p_new_login text, p_password text, p_role text)
 returns void
 language plpgsql
 security definer
-set search_path = public, extensions
+set search_path = public
 as $$
 declare
   remaining_admins int;
@@ -210,7 +230,7 @@ begin
 
   if p_password is not null and length(trim(p_password)) > 0 then
     update app_users
-      set login = p_new_login, password_hash = crypt(p_password, gen_salt('bf')), role = p_role
+      set login = p_new_login, password = p_password, password_hash = null, role = p_role
       where lower(login) = lower(p_old_login);
   else
     update app_users
@@ -279,7 +299,7 @@ begin
 end;
 $$;
 
--- ---------- Права на выполнение функций для анонимного доступа с сайта ----------
+-- ---------- Права на выполнение ----------
 
 grant execute on function app_login(text, text) to anon;
 grant execute on function app_logout(uuid) to anon;

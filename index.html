@@ -164,6 +164,7 @@
   .reset-link:hover { color: var(--accent); }
 
   @media (max-width: 900px) {
+    html, body { overflow-x: hidden; }
     .shell { flex-direction: column; }
     .rail {
       position: static;
@@ -745,19 +746,32 @@
   /* ---------- Users manager ---------- */
   .users-note { font-size: 0.86rem; color: var(--ink-soft); margin: 0 0 4px; }
   #users-list { display: flex; flex-direction: column; gap: 12px; }
-  .user-row { background: var(--surface); border: 1px solid var(--line); border-radius: 10px; padding: 14px 16px; display: grid; grid-template-columns: 1fr 1fr 150px auto; gap: 10px; align-items: end; }
-  @media (max-width: 620px) { .user-row { grid-template-columns: 1fr 1fr; } }
-  .user-row .uf { display: flex; flex-direction: column; gap: 4px; }
+  .user-row { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; }
+  .u-head { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap; }
+  .u-head .u-title { font-weight: 700; font-size: 0.92rem; }
+  .u-progress { font-size: 0.76rem; color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+  .u-progress b { color: var(--accent); font-weight: 700; }
+  .u-fields { display: grid; grid-template-columns: 1fr 1fr 150px; gap: 10px; align-items: end; }
+  .user-row .uf { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
   .user-row .uf label { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-soft); font-weight: 700; }
   .user-row .u-input, .user-row .u-select {
-    font-family: var(--font-body); font-size: 0.92rem; color: var(--ink);
-    background: var(--bg); border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; width: 100%;
+    font-family: var(--font-body); font-size: 0.95rem; color: var(--ink);
+    background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; width: 100%;
   }
   .user-row .u-input:focus, .user-row .u-select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
-  .user-row .u-del { background: none; border: 1px solid var(--line); color: var(--danger); border-radius: 6px; padding: 8px 12px; font-size: 0.8rem; cursor: pointer; height: fit-content; }
-  .user-row .u-del:hover { background: var(--danger-tint); }
-  .user-row .u-del:disabled { opacity: 0.4; cursor: not-allowed; }
+  .u-del { margin-left: auto; background: none; border: 1px solid var(--line); color: var(--danger); border-radius: 8px; padding: 7px 12px; font-size: 0.8rem; cursor: pointer; }
+  .u-del:hover { background: var(--danger-tint); }
+  .u-del:disabled { opacity: 0.4; cursor: not-allowed; }
   .u-you { font-size: 0.64rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent); background: var(--accent-tint); padding: 2px 7px; border-radius: 10px; margin-left: 6px; }
+  @media (max-width: 640px) {
+    .u-fields { grid-template-columns: 1fr; gap: 12px; }
+    .u-del { margin-left: 0; }
+    .modal { max-height: 92vh; border-radius: 12px; }
+    .modal-body { padding: 14px 16px; }
+    .modal-head, .modal-foot { padding: 14px 16px; }
+    .modal-foot { gap: 8px; }
+    .modal-foot .btn { flex: 1 1 auto; }
+  }
 </style>
 </head>
 <body>
@@ -831,18 +845,17 @@
     </div>
 
     <nav class="sidenav" id="sidenav">
-      <button class="nav-btn active" data-tab="standards" data-order="1"><span class="n">01</span><span class="nav-label">Стандарты сервиса</span><span class="nav-state"></span></button>
-      <button class="nav-btn" data-tab="process" data-order="2"><span class="n">02</span><span class="nav-label">Как проходит уборка</span><span class="nav-state"></span></button>
-      <button class="nav-btn" data-tab="surfaces" data-order="3"><span class="n">03</span><span class="nav-label">Поверхности и уход</span><span class="nav-state"></span></button>
-      <button class="nav-btn" data-tab="chemistry" data-order="4"><span class="n">04</span><span class="nav-label">Химия и оборудование</span><span class="nav-state"></span></button>
-      <button class="nav-btn" data-tab="rules" data-order="5"><span class="n">05</span><span class="nav-label">Регламенты компании</span><span class="nav-state"></span></button>
-      <button class="nav-btn" data-tab="test" data-order="6" data-test="1"><span class="n">06</span><span class="nav-label">Тест на аттестацию</span><span class="nav-state"></span></button>
+      <button class="nav-btn active" data-tab="standards" data-order="1"><span class="n">01</span><span class="nav-label" data-edit="nav.standards">Стандарты сервиса</span><span class="nav-state"></span></button>
+      <button class="nav-btn" data-tab="process" data-order="2"><span class="n">02</span><span class="nav-label" data-edit="nav.process">Как проходит уборка</span><span class="nav-state"></span></button>
+      <button class="nav-btn" data-tab="surfaces" data-order="3"><span class="n">03</span><span class="nav-label" data-edit="nav.surfaces">Поверхности и уход</span><span class="nav-state"></span></button>
+      <button class="nav-btn" data-tab="chemistry" data-order="4"><span class="n">04</span><span class="nav-label" data-edit="nav.chemistry">Химия и оборудование</span><span class="nav-state"></span></button>
+      <button class="nav-btn" data-tab="rules" data-order="5"><span class="n">05</span><span class="nav-label" data-edit="nav.rules">Регламенты компании</span><span class="nav-state"></span></button>
+      <button class="nav-btn" data-tab="test" data-order="6" data-test="1"><span class="n">06</span><span class="nav-label" data-edit="nav.test">Тест на аттестацию</span><span class="nav-state"></span></button>
     </nav>
 
     <div class="rail-bottom">
       <button type="button" class="btn rail-admin" id="open-users" hidden>⚙ Админ-панель</button>
       <button type="button" class="btn secondary rail-logout" id="logout-btn">Выйти</button>
-      <button type="button" class="reset-link" id="reset-progress">Сбросить прогресс обучения</button>
     </div>
   </aside>
 
@@ -857,12 +870,9 @@
         <button type="button" class="btn" id="ab-save" hidden>Сохранить</button>
         <button type="button" class="btn secondary" id="ab-cancel" hidden>Отменить</button>
         <button type="button" class="btn secondary" id="ab-quiz">Редактор теста</button>
-        <button type="button" class="btn secondary" id="ab-export">Экспорт</button>
-        <button type="button" class="btn secondary" id="ab-import">Импорт</button>
         <button type="button" class="btn secondary" id="ab-reset">Сбросить всё</button>
       </div>
     </div>
-    <input type="file" id="import-file" accept="application/json,.json" hidden>
 
     <!-- ============ 01 STANDARDS ============ -->
     <section class="panel active" id="panel-standards">

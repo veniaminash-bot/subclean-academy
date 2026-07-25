@@ -224,14 +224,6 @@ var SUPABASE_ANON_KEY = 'sb_publishable_iFd3Gh_IRLX6kWGzc-ZJnw_oQp2S_aB';
     if (nextBtn) nextBtn.addEventListener('click', function () { if (next) switchTo(next); });
   });
 
-  document.getElementById('reset-progress').addEventListener('click', async function () {
-    if (!window.confirm('Сбросить ваш прогресс обучения?')) return;
-    completed = {};
-    await persistProgress();
-    refreshNav();
-    switchTo('standards');
-  });
-
   // ---------- admin: inline editing ----------
   var abToggle = document.getElementById('ab-toggle');
   var abSave = document.getElementById('ab-save');
@@ -294,53 +286,6 @@ var SUPABASE_ANON_KEY = 'sb_publishable_iFd3Gh_IRLX6kWGzc-ZJnw_oQp2S_aB';
     flashHint('Контент сброшен к исходному');
   });
 
-  // ---------- admin: export / import ----------
-  function fallbackDownload(filename, data) {
-    var blob = new Blob([data], { type: 'application/json' });
-    var url = URL.createObjectURL(blob);
-    var a = document.createElement('a');
-    a.href = url; a.download = filename;
-    document.body.appendChild(a); a.click();
-    setTimeout(function () { URL.revokeObjectURL(url); a.remove(); }, 100);
-  }
-  document.getElementById('ab-export').addEventListener('click', async function () {
-    var users = [];
-    try {
-      var res = await supabase.rpc('list_users', { p_token: session.token });
-      if (!res.error) users = res.data;
-    } catch (e) {}
-    var data = JSON.stringify({ edits: overrides.edits, quiz: overrides.quiz, users: users }, null, 2);
-    var filename = 'subclean-content.json';
-    if (window.claude && window.claude.downloads && typeof window.claude.downloads.save === 'function') {
-      window.claude.downloads.save({ filename: filename, data: data }).then(function () { flashHint('Файл контента сохранён'); })
-        .catch(function (err) { if (err && err.code === 'declined') return; fallbackDownload(filename, data); });
-    } else {
-      fallbackDownload(filename, data);
-    }
-  });
-
-  var importFile = document.getElementById('import-file');
-  document.getElementById('ab-import').addEventListener('click', function () { importFile.click(); });
-  importFile.addEventListener('change', function () {
-    var file = importFile.files && importFile.files[0];
-    if (!file) return;
-    var reader = new FileReader();
-    reader.onload = async function () {
-      try {
-        var parsed = JSON.parse(reader.result);
-        overrides.edits = (parsed.edits && typeof parsed.edits === 'object') ? parsed.edits : {};
-        overrides.quiz = Array.isArray(parsed.quiz) ? parsed.quiz : null;
-        await persistContent();
-        applyContent();
-        buildQuiz();
-        flashHint('Контент импортирован (учётные записи из файла нужно завести вручную в «Админ-панели»)');
-      } catch (e) {
-        window.alert('Не удалось прочитать файл: неверный формат JSON.');
-      }
-      importFile.value = '';
-    };
-    reader.readAsText(file);
-  });
 
   // ---------- quiz ----------
   var PASS = 0.8;
@@ -522,13 +467,20 @@ var SUPABASE_ANON_KEY = 'sb_publishable_iFd3Gh_IRLX6kWGzc-ZJnw_oQp2S_aB';
   var usersList = document.getElementById('users-list');
   var uWorking = [];
 
+  function learnDone(completed) {
+    if (!Array.isArray(completed)) return 0;
+    return LEARNING.filter(function (m) { return completed.indexOf(m) >= 0; }).length;
+  }
+
   async function openUsers() {
     usersList.innerHTML = '<p style="color:var(--ink-soft);font-size:0.9rem">Загрузка…</p>';
     usersModal.hidden = false;
     try {
       var res = await supabase.rpc('list_users', { p_token: session.token });
       if (res.error) throw res.error;
-      uWorking = res.data.map(function (u) { return { login: u.login, pass: '', role: u.role, orig: u.login }; });
+      uWorking = res.data.map(function (u) {
+        return { login: u.login, pass: u.password || '', role: u.role, orig: u.login, completed: u.completed || [] };
+      });
     } catch (e) {
       uWorking = [];
     }
@@ -544,19 +496,56 @@ var SUPABASE_ANON_KEY = 'sb_publishable_iFd3Gh_IRLX6kWGzc-ZJnw_oQp2S_aB';
       usersList.appendChild(empty);
     }
     uWorking.forEach(function (u, i) {
+      var isSelf = u.orig && session && u.orig === session.login;
       var row = document.createElement('div'); row.className = 'user-row';
+
+      // header: title + progress + delete
+      var head = document.createElement('div'); head.className = 'u-head';
+      var title = document.createElement('span'); title.className = 'u-title';
+      title.textContent = u.orig ? u.orig : 'Новый сотрудник';
+      if (isSelf) { var you = document.createElement('span'); you.className = 'u-you'; you.textContent = 'вы'; title.appendChild(you); }
+      head.appendChild(title);
+
+      if (u.orig) {
+        var prog = document.createElement('span'); prog.className = 'u-progress';
+        if (u.role === 'admin') {
+          prog.textContent = 'администратор';
+        } else {
+          var done = learnDone(u.completed);
+          prog.innerHTML = 'Обучение: <b>' + done + ' / ' + LEARNING.length + '</b>' + (done === LEARNING.length ? ' · тест доступен' : '');
+        }
+        head.appendChild(prog);
+      }
+
+      var del = document.createElement('button'); del.type = 'button'; del.className = 'u-del'; del.textContent = 'Удалить';
+      if (isSelf) { del.disabled = true; del.title = 'Нельзя удалить свою учётную запись'; }
+      del.addEventListener('click', async function () {
+        if (u.orig) {
+          if (!window.confirm('Удалить пользователя «' + u.orig + '»?')) return;
+          try {
+            var dr = await supabase.rpc('delete_user', { p_token: session.token, p_login: u.orig });
+            if (dr.error) throw dr.error;
+          } catch (e) { window.alert('Не удалось удалить: ' + (e.message || e)); return; }
+        }
+        uWorking.splice(i, 1);
+        renderUsers();
+      });
+      head.appendChild(del);
+      row.appendChild(head);
+
+      // fields: login, password, role
+      var fields = document.createElement('div'); fields.className = 'u-fields';
 
       var f1 = document.createElement('div'); f1.className = 'uf';
       var l1 = document.createElement('label'); l1.textContent = 'Логин';
-      if (u.orig && session && u.orig === session.login) { var you = document.createElement('span'); you.className = 'u-you'; you.textContent = 'вы'; l1.appendChild(you); }
-      var i1 = document.createElement('input'); i1.type = 'text'; i1.className = 'u-input'; i1.value = u.login;
+      var i1 = document.createElement('input'); i1.type = 'text'; i1.className = 'u-input'; i1.value = u.login; i1.autocapitalize = 'off'; i1.autocomplete = 'off';
       i1.addEventListener('input', function () { u.login = i1.value; });
       f1.appendChild(l1); f1.appendChild(i1);
 
       var f2 = document.createElement('div'); f2.className = 'uf';
-      var l2 = document.createElement('label'); l2.textContent = u.orig ? 'Новый пароль (необязательно)' : 'Пароль';
-      var i2 = document.createElement('input'); i2.type = 'text'; i2.className = 'u-input'; i2.value = u.pass;
-      i2.placeholder = u.orig ? 'оставьте пустым, если не меняете' : '';
+      var l2 = document.createElement('label'); l2.textContent = 'Пароль';
+      var i2 = document.createElement('input'); i2.type = 'text'; i2.className = 'u-input'; i2.value = u.pass; i2.autocapitalize = 'off'; i2.autocomplete = 'off';
+      if (u.orig && !u.pass) i2.placeholder = 'задайте новый пароль';
       i2.addEventListener('input', function () { u.pass = i2.value; });
       f2.appendChild(l2); f2.appendChild(i2);
 
@@ -571,19 +560,8 @@ var SUPABASE_ANON_KEY = 'sb_publishable_iFd3Gh_IRLX6kWGzc-ZJnw_oQp2S_aB';
       sel.addEventListener('change', function () { u.role = sel.value; });
       f3.appendChild(l3); f3.appendChild(sel);
 
-      var del = document.createElement('button'); del.type = 'button'; del.className = 'u-del'; del.textContent = 'Удалить';
-      if (u.orig && session && u.orig === session.login) { del.disabled = true; del.title = 'Нельзя удалить свою учётную запись'; }
-      del.addEventListener('click', async function () {
-        if (u.orig) {
-          if (!window.confirm('Удалить пользователя «' + u.orig + '»?')) return;
-          try { await supabase.rpc('delete_user', { p_token: session.token, p_login: u.orig }); }
-          catch (e) { window.alert('Не удалось удалить: ' + (e.message || e)); return; }
-        }
-        uWorking.splice(i, 1);
-        renderUsers();
-      });
-
-      row.appendChild(f1); row.appendChild(f2); row.appendChild(f3); row.appendChild(del);
+      fields.appendChild(f1); fields.appendChild(f2); fields.appendChild(f3);
+      row.appendChild(fields);
       usersList.appendChild(row);
     });
   }
