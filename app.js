@@ -11,7 +11,124 @@ var SUPABASE_ANON_KEY = 'sb_publishable_iFd3Gh_IRLX6kWGzc-ZJnw_oQp2S_aB';
 
 (function () {
   var SESSION_KEY = 'subclean-session-v1';
-  var LEARNING = ['standards', 'process', 'surfaces', 'chemistry', 'rules'];
+  var BUILTIN_ORDER = ['standards', 'process', 'surfaces', 'chemistry', 'rules'];
+  var TEST_ID = 'test';
+  var BUILTIN_LABELS = {
+    standards: 'Стандарты сервиса', process: 'Как проходит уборка', surfaces: 'Поверхности и уход',
+    chemistry: 'Химия и оборудование', rules: 'Регламенты компании', test: 'Тест на аттестацию'
+  };
+
+  function defaultTabsConfig() { return { order: BUILTIN_ORDER.slice(), hidden: [], custom: {} }; }
+  var tabsConfig = defaultTabsConfig();
+  function learningIds() { return tabsConfig.order.filter(function (id) { return tabsConfig.hidden.indexOf(id) === -1; }); }
+
+  function normalizeTabsConfig(raw) {
+    var cfg = defaultTabsConfig();
+    if (raw && typeof raw === 'object') {
+      if (raw.custom && typeof raw.custom === 'object') {
+        Object.keys(raw.custom).forEach(function (id) { cfg.custom[id] = true; });
+      }
+      var order = [];
+      var seen = {};
+      if (Array.isArray(raw.order)) {
+        raw.order.forEach(function (id) {
+          if (id === TEST_ID || seen[id]) return;
+          if (BUILTIN_ORDER.indexOf(id) === -1 && !cfg.custom[id]) return;
+          seen[id] = true;
+          order.push(id);
+        });
+      }
+      BUILTIN_ORDER.forEach(function (id) { if (!seen[id]) { seen[id] = true; order.push(id); } });
+      Object.keys(cfg.custom).forEach(function (id) { if (!seen[id]) { seen[id] = true; order.push(id); } });
+      cfg.order = order;
+      if (Array.isArray(raw.hidden)) cfg.hidden = raw.hidden.filter(function (id) { return id !== TEST_ID; });
+    }
+    return cfg;
+  }
+
+  function makeTabId() { return 'tab' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
+
+  function panelTemplate(id) {
+    var section = document.createElement('section');
+    section.className = 'panel';
+    section.id = 'panel-' + id;
+    section.innerHTML =
+      '<div class="panel-head">' +
+        '<span class="eyebrow" data-mod-eyebrow="' + id + '">Модуль</span>' +
+        '<h1 data-edit="' + id + '.title">Новый раздел</h1>' +
+        '<p class="lede" data-edit="' + id + '.lede">Короткое описание раздела.</p>' +
+      '</div>' +
+      '<div class="module-content" data-edit="' + id + '.body"><p>Нажмите «Редактировать контент», чтобы заполнить этот раздел.</p></div>' +
+      '<div class="module-foot" data-module="' + id + '">' +
+        '<button type="button" class="btn study-btn">Материал изучен, далее →</button>' +
+        '<span class="done-badge">Раздел изучен</span>' +
+        '<button type="button" class="btn secondary next-btn">Следующий раздел →</button>' +
+      '</div>';
+    return section;
+  }
+  function navBtnTemplate(id) {
+    var btn = document.createElement('button');
+    btn.className = 'nav-btn';
+    btn.dataset.tab = id;
+    btn.dataset.custom = '1';
+    btn.innerHTML = '<span class="n"></span><span class="nav-label" data-edit="nav.' + id + '">Новый раздел</span><span class="nav-state"></span>';
+    return btn;
+  }
+
+  function renumberNav() {
+    var i = 0;
+    Array.prototype.forEach.call(document.getElementById('sidenav').children, function (btn) {
+      if (btn.hidden) return;
+      i++;
+      var label = (i < 10 ? '0' : '') + i;
+      var nEl = btn.querySelector('.n');
+      if (nEl) nEl.textContent = label;
+      var eyebrow = document.querySelector('.panel-head .eyebrow[data-mod-eyebrow="' + btn.dataset.tab + '"]');
+      if (eyebrow) eyebrow.textContent = 'Модуль ' + label;
+    });
+  }
+
+  function renderModules() {
+    var mainCol = document.querySelector('.main-col');
+    var sidenav = document.getElementById('sidenav');
+    var testPanel = document.getElementById('panel-test');
+
+    // create DOM for custom modules that don't exist yet
+    Object.keys(tabsConfig.custom).forEach(function (id) {
+      if (!document.getElementById('panel-' + id)) mainCol.insertBefore(panelTemplate(id), testPanel);
+      if (!document.querySelector('.nav-btn[data-tab="' + id + '"]')) sidenav.appendChild(navBtnTemplate(id));
+    });
+    // drop DOM for custom modules that were removed from config
+    Array.prototype.slice.call(document.querySelectorAll('.nav-btn[data-custom="1"]')).forEach(function (btn) {
+      var id = btn.dataset.tab;
+      if (!tabsConfig.custom[id]) {
+        btn.remove();
+        var p = document.getElementById('panel-' + id);
+        if (p) p.remove();
+      }
+    });
+    // hidden state (test is never hidden)
+    tabsConfig.order.forEach(function (id) {
+      var btn = document.querySelector('.nav-btn[data-tab="' + id + '"]');
+      if (btn) btn.hidden = tabsConfig.hidden.indexOf(id) !== -1;
+    });
+    // reorder
+    tabsConfig.order.forEach(function (id) {
+      var btn = document.querySelector('.nav-btn[data-tab="' + id + '"]');
+      if (btn) sidenav.appendChild(btn);
+    });
+    var testBtn = document.querySelector('.nav-btn[data-tab="' + TEST_ID + '"]');
+    if (testBtn) sidenav.appendChild(testBtn);
+    // wire "next" for module-foot buttons
+    var lrn = learningIds();
+    lrn.forEach(function (id, i) {
+      var foot = document.querySelector('.module-foot[data-module="' + id + '"]');
+      if (!foot) return;
+      foot.dataset.next = (i + 1 < lrn.length) ? lrn[i + 1] : TEST_ID;
+      foot.classList.toggle('is-last', i === lrn.length - 1);
+    });
+    renumberNav();
+  }
 
   var configured = SUPABASE_URL.indexOf('ВСТАВЬТЕ') === -1 && SUPABASE_ANON_KEY.indexOf('ВСТАВЬТЕ') === -1;
   var supabase = configured && window.supabase
@@ -69,6 +186,8 @@ var SUPABASE_ANON_KEY = 'sb_publishable_iFd3Gh_IRLX6kWGzc-ZJnw_oQp2S_aB';
     await loadProgress();
     buildQuiz();
     refreshNav();
+    var activeBtn = document.querySelector('.nav-btn.active');
+    if (!activeBtn || activeBtn.hidden) switchTo(learningIds()[0] || TEST_ID);
   }
 
   loginForm.addEventListener('submit', async function (e) {
@@ -100,9 +219,16 @@ var SUPABASE_ANON_KEY = 'sb_publishable_iFd3Gh_IRLX6kWGzc-ZJnw_oQp2S_aB';
   });
 
   // ---------- content (module text overrides + quiz) ----------
-  var editEls = Array.prototype.slice.call(document.querySelectorAll('[data-edit]'));
+  var editEls = [];
   var DEFAULTS = {};
-  editEls.forEach(function (el) { DEFAULTS[el.getAttribute('data-edit')] = el.innerHTML; });
+  function captureDefaults() {
+    editEls = Array.prototype.slice.call(document.querySelectorAll('[data-edit]'));
+    editEls.forEach(function (el) {
+      var key = el.getAttribute('data-edit');
+      if (!(key in DEFAULTS)) DEFAULTS[key] = el.innerHTML;
+    });
+  }
+  captureDefaults();
   var overrides = { edits: {}, quiz: null };
 
   function applyContent() {
@@ -120,6 +246,9 @@ var SUPABASE_ANON_KEY = 'sb_publishable_iFd3Gh_IRLX6kWGzc-ZJnw_oQp2S_aB';
         overrides.quiz = res.data[0].quiz || null;
       }
     } catch (e) {}
+    tabsConfig = normalizeTabsConfig(overrides.edits.__tabs);
+    renderModules();
+    captureDefaults();
     applyContent();
   }
 
@@ -167,20 +296,19 @@ var SUPABASE_ANON_KEY = 'sb_publishable_iFd3Gh_IRLX6kWGzc-ZJnw_oQp2S_aB';
     await supabase.rpc('save_progress', { p_token: session.token, p_completed: Object.keys(completed) });
   }
 
-  var navButtons = Array.prototype.slice.call(document.querySelectorAll('.nav-btn'));
-  var panels = Array.prototype.slice.call(document.querySelectorAll('section.panel'));
-
   function isUnlocked(tab) {
-    if (tab === 'standards') return true;
-    var idx = LEARNING.indexOf(tab);
-    if (idx > 0) return !!completed[LEARNING[idx - 1]];
-    if (tab === 'test') return LEARNING.every(function (m) { return completed[m]; });
+    var lrn = learningIds();
+    if (tab === lrn[0]) return true;
+    var idx = lrn.indexOf(tab);
+    if (idx > 0) return !!completed[lrn[idx - 1]];
+    if (tab === TEST_ID) return lrn.every(function (m) { return completed[m]; });
     return true;
   }
-  function completedCount() { return LEARNING.filter(function (m) { return completed[m]; }).length; }
+  function completedCount() { return learningIds().filter(function (m) { return completed[m]; }).length; }
 
   function refreshNav() {
-    navButtons.forEach(function (btn) {
+    var lrn = learningIds();
+    Array.prototype.forEach.call(document.querySelectorAll('.nav-btn'), function (btn) {
       var tab = btn.dataset.tab;
       var state = btn.querySelector('.nav-state');
       btn.classList.remove('done', 'locked');
@@ -188,40 +316,47 @@ var SUPABASE_ANON_KEY = 'sb_publishable_iFd3Gh_IRLX6kWGzc-ZJnw_oQp2S_aB';
       else if (!isUnlocked(tab)) { btn.classList.add('locked'); if (state) state.textContent = '🔒'; }
       else { if (state) state.textContent = ''; }
     });
-    LEARNING.forEach(function (m) {
+    lrn.forEach(function (m) {
       var foot = document.querySelector('.module-foot[data-module="' + m + '"]');
       if (foot) foot.classList.toggle('is-done', !!completed[m]);
     });
     var done = completedCount();
-    document.getElementById('rp-count').textContent = done + ' / ' + LEARNING.length;
-    document.getElementById('rp-fill').style.width = Math.round((done / LEARNING.length) * 100) + '%';
+    document.getElementById('rp-count').textContent = done + ' / ' + lrn.length;
+    document.getElementById('rp-fill').style.width = (lrn.length ? Math.round((done / lrn.length) * 100) : 0) + '%';
   }
 
   function switchTo(tab) {
     if (!isUnlocked(tab)) return false;
-    navButtons.forEach(function (b) { b.classList.remove('active'); });
-    panels.forEach(function (p) { p.classList.remove('active'); });
+    Array.prototype.forEach.call(document.querySelectorAll('.nav-btn'), function (b) { b.classList.remove('active'); });
+    Array.prototype.forEach.call(document.querySelectorAll('section.panel'), function (p) { p.classList.remove('active'); });
     var btn = document.querySelector('.nav-btn[data-tab="' + tab + '"]');
     if (btn) btn.classList.add('active');
-    document.getElementById('panel-' + tab).classList.add('active');
+    var panel = document.getElementById('panel-' + tab);
+    if (panel) panel.classList.add('active');
     window.scrollTo({ top: 0, behavior: 'smooth' });
     return true;
   }
 
   var editing = false;
-  navButtons.forEach(function (btn) { btn.addEventListener('click', function () { if (!editing) switchTo(btn.dataset.tab); }); });
+  document.getElementById('sidenav').addEventListener('click', function (e) {
+    var btn = e.target.closest('.nav-btn');
+    if (btn && !editing) switchTo(btn.dataset.tab);
+  });
 
-  Array.prototype.slice.call(document.querySelectorAll('.module-foot')).forEach(function (foot) {
-    var mod = foot.dataset.module, next = foot.dataset.next;
-    var studyBtn = foot.querySelector('.study-btn');
-    var nextBtn = foot.querySelector('.next-btn');
-    if (studyBtn) studyBtn.addEventListener('click', async function () {
-      completed[mod] = true;
+  document.querySelector('.main-col').addEventListener('click', async function (e) {
+    var studyBtn = e.target.closest('.study-btn');
+    var nextBtn = e.target.closest('.next-btn');
+    if (studyBtn) {
+      var foot = studyBtn.closest('.module-foot');
+      if (!foot) return;
+      completed[foot.dataset.module] = true;
       await persistProgress();
       refreshNav();
-      if (next) switchTo(next);
-    });
-    if (nextBtn) nextBtn.addEventListener('click', function () { if (next) switchTo(next); });
+      if (foot.dataset.next) switchTo(foot.dataset.next);
+    } else if (nextBtn) {
+      var foot2 = nextBtn.closest('.module-foot');
+      if (foot2 && foot2.dataset.next) switchTo(foot2.dataset.next);
+    }
   });
 
   // ---------- admin: inline editing ----------
@@ -469,7 +604,7 @@ var SUPABASE_ANON_KEY = 'sb_publishable_iFd3Gh_IRLX6kWGzc-ZJnw_oQp2S_aB';
 
   function learnDone(completed) {
     if (!Array.isArray(completed)) return 0;
-    return LEARNING.filter(function (m) { return completed.indexOf(m) >= 0; }).length;
+    return learningIds().filter(function (m) { return completed.indexOf(m) >= 0; }).length;
   }
 
   async function openUsers() {
@@ -512,7 +647,8 @@ var SUPABASE_ANON_KEY = 'sb_publishable_iFd3Gh_IRLX6kWGzc-ZJnw_oQp2S_aB';
           prog.textContent = 'администратор';
         } else {
           var done = learnDone(u.completed);
-          prog.innerHTML = 'Обучение: <b>' + done + ' / ' + LEARNING.length + '</b>' + (done === LEARNING.length ? ' · тест доступен' : '');
+          var lrnTotal = learningIds().length;
+          prog.innerHTML = 'Обучение: <b>' + done + ' / ' + lrnTotal + '</b>' + (done === lrnTotal ? ' · тест доступен' : '');
         }
         head.appendChild(prog);
       }
@@ -607,6 +743,126 @@ var SUPABASE_ANON_KEY = 'sb_publishable_iFd3Gh_IRLX6kWGzc-ZJnw_oQp2S_aB';
       flashHint('Доступы обновлены');
     } catch (e) {
       window.alert('Не удалось сохранить: ' + (e.message || e));
+    }
+    saveBtn.disabled = false; saveBtn.textContent = 'Сохранить';
+  });
+
+  // ---------- tabs manager ----------
+  var tabsModal = document.getElementById('tabs-modal');
+  var tabsListEl = document.getElementById('tabs-list');
+  var tWorking = null;
+
+  function cloneTabsConfig(cfg) {
+    return { order: cfg.order.slice(), hidden: cfg.hidden.slice(), custom: Object.assign({}, cfg.custom) };
+  }
+  function labelFor(id) {
+    var el = document.querySelector('.nav-btn[data-tab="' + id + '"] .nav-label');
+    if (el) return el.textContent;
+    if (BUILTIN_LABELS[id]) return BUILTIN_LABELS[id];
+    return tWorking && tWorking.custom[id] ? 'Новый раздел' : id;
+  }
+
+  function renderTabsEditor() {
+    tabsListEl.innerHTML = '';
+    var full = tWorking.order.concat([TEST_ID]);
+    full.forEach(function (id, i) {
+      var isTest = id === TEST_ID;
+      var isCustom = !!tWorking.custom[id];
+      var row = document.createElement('div'); row.className = 'user-row';
+
+      var head = document.createElement('div'); head.className = 'u-head';
+      var title = document.createElement('span'); title.className = 'u-title';
+      title.textContent = labelFor(id) + (isTest ? ' (тест)' : '');
+      head.appendChild(title);
+      if (tWorking.hidden.indexOf(id) !== -1) {
+        var badge = document.createElement('span'); badge.className = 'tab-hidden-badge'; badge.textContent = 'скрыта';
+        head.appendChild(badge);
+      }
+      row.appendChild(head);
+
+      var actions = document.createElement('div'); actions.className = 'tab-row-actions';
+
+      if (!isTest) {
+        var order = tWorking.order;
+        var up = document.createElement('button'); up.type = 'button'; up.className = 'btn secondary'; up.textContent = '↑ Выше';
+        up.disabled = (i === 0);
+        up.addEventListener('click', function () {
+          var idx = order.indexOf(id);
+          if (idx > 0) { var t = order[idx - 1]; order[idx - 1] = order[idx]; order[idx] = t; renderTabsEditor(); }
+        });
+        var down = document.createElement('button'); down.type = 'button'; down.className = 'btn secondary'; down.textContent = '↓ Ниже';
+        down.disabled = (i === order.length - 1);
+        down.addEventListener('click', function () {
+          var idx = order.indexOf(id);
+          if (idx > -1 && idx < order.length - 1) { var t = order[idx + 1]; order[idx + 1] = order[idx]; order[idx] = t; renderTabsEditor(); }
+        });
+        actions.appendChild(up); actions.appendChild(down);
+
+        var toggle = document.createElement('button'); toggle.type = 'button'; toggle.className = 'btn secondary';
+        var hiddenNow = tWorking.hidden.indexOf(id) !== -1;
+        toggle.textContent = hiddenNow ? 'Показать' : 'Скрыть';
+        toggle.addEventListener('click', function () {
+          var hi = tWorking.hidden.indexOf(id);
+          if (hi === -1) tWorking.hidden.push(id); else tWorking.hidden.splice(hi, 1);
+          renderTabsEditor();
+        });
+        actions.appendChild(toggle);
+      }
+
+      if (isCustom) {
+        var del = document.createElement('button'); del.type = 'button'; del.className = 'u-del'; del.textContent = 'Удалить';
+        del.addEventListener('click', function () {
+          if (!window.confirm('Удалить вкладку «' + labelFor(id) + '»? Содержимое будет удалено безвозвратно.')) return;
+          delete tWorking.custom[id];
+          var oi = tWorking.order.indexOf(id); if (oi > -1) tWorking.order.splice(oi, 1);
+          var hi = tWorking.hidden.indexOf(id); if (hi > -1) tWorking.hidden.splice(hi, 1);
+          renderTabsEditor();
+        });
+        actions.appendChild(del);
+      }
+
+      row.appendChild(actions);
+      tabsListEl.appendChild(row);
+    });
+  }
+
+  function openTabsEditor() { tWorking = cloneTabsConfig(tabsConfig); renderTabsEditor(); tabsModal.hidden = false; }
+  function closeTabsEditor() { tabsModal.hidden = true; }
+
+  document.getElementById('ab-tabs').addEventListener('click', openTabsEditor);
+  document.getElementById('tabs-modal-close').addEventListener('click', closeTabsEditor);
+  document.getElementById('tabs-cancel').addEventListener('click', closeTabsEditor);
+  tabsModal.addEventListener('click', function (e) { if (e.target === tabsModal) closeTabsEditor(); });
+
+  document.getElementById('tabs-add').addEventListener('click', function () {
+    var id = makeTabId();
+    tWorking.custom[id] = true;
+    tWorking.order.push(id);
+    renderTabsEditor();
+    tabsListEl.scrollTop = tabsListEl.scrollHeight;
+  });
+
+  document.getElementById('tabs-save').addEventListener('click', async function () {
+    tabsConfig = cloneTabsConfig(tWorking);
+    overrides.edits.__tabs = { order: tabsConfig.order, hidden: tabsConfig.hidden, custom: tabsConfig.custom };
+    renderModules();
+    captureDefaults();
+    applyContent();
+    refreshNav();
+
+    var activeBtn = document.querySelector('.nav-btn.active');
+    if (!activeBtn || activeBtn.hidden) {
+      switchTo(learningIds()[0] || TEST_ID);
+    }
+
+    var saveBtn = document.getElementById('tabs-save');
+    saveBtn.disabled = true; saveBtn.textContent = 'Сохраняем…';
+    try {
+      await persistContent();
+      flashHint('Вкладки обновлены');
+      closeTabsEditor();
+    } catch (e) {
+      window.alert('Не удалось сохранить — проверьте связь.');
     }
     saveBtn.disabled = false; saveBtn.textContent = 'Сохранить';
   });

@@ -120,8 +120,8 @@
     -webkit-font-smoothing: antialiased;
   }
   h1, h2, h3, h4 { font-family: var(--font-display); font-weight: 700; text-wrap: balance; margin: 0; color: var(--ink); }
-  p { margin: 0 0 0.9em; max-width: 66ch; }
-  ul, ol { margin: 0 0 0.9em; padding-left: 1.2em; max-width: 64ch; }
+  p { margin: 0 0 0.9em; }
+  ul, ol { margin: 0 0 0.9em; padding-left: 1.2em; }
   li { margin-bottom: 0.4em; }
   strong { font-weight: 700; }
   .eyebrow {
@@ -164,12 +164,13 @@
   .reset-link:hover { color: var(--accent); }
 
   @media (max-width: 900px) {
-    html, body { overflow-x: hidden; }
-    .shell { flex-direction: column; }
+    html, body { overflow-x: hidden; max-width: 100%; }
+    .shell { flex-direction: column; align-items: stretch; }
     .rail {
       position: static;
       height: auto;
-      width: auto;
+      width: 100%;
+      max-width: 100%;
       flex: 0 0 auto;
       flex-direction: row;
       align-items: center;
@@ -178,11 +179,12 @@
       border-right: none;
       border-bottom: 1px solid var(--line);
       padding: 14px 20px;
+      box-sizing: border-box;
     }
     .rail-top { margin: 0; }
     .logo-mark { width: 132px; }
     .rail-progress { display: none; }
-    .sidenav { order: 3; flex-direction: row; flex-basis: 100%; overflow-x: auto; gap: 6px; padding-bottom: 2px; }
+    .sidenav { order: 3; flex-direction: row; flex-basis: 100%; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; gap: 6px; padding-bottom: 2px; }
     .rail-bottom { margin: 0 0 0 auto; padding: 0; flex-direction: row; align-items: center; }
     .reset-link { display: none; }
     .rail-logout { width: auto; }
@@ -204,6 +206,7 @@
     border-radius: 0 8px 8px 0;
     white-space: nowrap;
   }
+  .nav-btn[hidden] { display: none !important; }
   .nav-btn:hover { background: var(--surface); color: var(--ink); }
   .nav-btn.active { color: var(--ink); border-left-color: var(--accent); background: var(--surface); font-weight: 700; }
   .nav-btn .n { font-family: var(--font-mono); font-size: 0.72rem; color: var(--ink-soft); flex: none; }
@@ -273,7 +276,7 @@
   .panel-head { margin-bottom: 40px; padding-bottom: 28px; border-bottom: 1px solid var(--line); }
   .panel-head .eyebrow { display: block; margin-bottom: 14px; }
   .panel-head h1 { font-size: clamp(1.8rem, 1.4rem + 1.7vw, 2.6rem); letter-spacing: -0.015em; line-height: 1.1; margin-bottom: 12px; }
-  .panel-head .lede { color: var(--ink-soft); max-width: 62ch; font-size: 1.06rem; line-height: 1.6; }
+  .panel-head .lede { color: var(--ink-soft); font-size: 1.06rem; line-height: 1.6; }
 
   h2.block-title { font-size: 1.22rem; margin: 42px 0 14px; }
   h2.block-title:first-of-type { margin-top: 0; }
@@ -443,7 +446,7 @@
     margin: 20px 0 24px;
   }
   .big-rule .headline { font-family: var(--font-display); font-weight: 800; font-size: clamp(1.3rem, 1.05rem + 1.2vw, 1.8rem); line-height: 1.15; margin-bottom: 8px; }
-  .big-rule p { color: rgba(255,255,255,0.9); max-width: 60ch; margin-bottom: 0; }
+  .big-rule p { color: rgba(255,255,255,0.9); margin-bottom: 0; }
 
   /* ---------- Regulation prose ---------- */
   .rule-list { list-style: none; padding: 0; margin: 14px 0 26px; display: grid; gap: 10px; max-width: none; }
@@ -763,6 +766,11 @@
   .u-del:hover { background: var(--danger-tint); }
   .u-del:disabled { opacity: 0.4; cursor: not-allowed; }
   .u-you { font-size: 0.64rem; font-weight: 800; text-transform: uppercase; letter-spacing: 0.05em; color: var(--accent); background: var(--accent-tint); padding: 2px 7px; border-radius: 10px; margin-left: 6px; }
+
+  /* ---------- Tabs manager ---------- */
+  .tab-row-actions { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; margin-top: 4px; }
+  .tab-row-actions .btn { padding: 6px 12px; font-size: 0.8rem; }
+  .tab-hidden-badge { font-size: 0.66rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.04em; color: var(--ink-soft); background: var(--surface-2); padding: 2px 8px; border-radius: 10px; }
   @media (max-width: 640px) {
     .u-fields { grid-template-columns: 1fr; gap: 12px; }
     .u-del { margin-left: 0; }
@@ -870,6 +878,7 @@
         <button type="button" class="btn" id="ab-save" hidden>Сохранить</button>
         <button type="button" class="btn secondary" id="ab-cancel" hidden>Отменить</button>
         <button type="button" class="btn secondary" id="ab-quiz">Редактор теста</button>
+        <button type="button" class="btn secondary" id="ab-tabs">Вкладки обучения</button>
         <button type="button" class="btn secondary" id="ab-reset">Сбросить всё</button>
       </div>
     </div>
@@ -877,7 +886,7 @@
     <!-- ============ 01 STANDARDS ============ -->
     <section class="panel active" id="panel-standards">
       <div class="panel-head">
-        <span class="eyebrow">Модуль 01</span>
+        <span class="eyebrow" data-mod-eyebrow="standards">Модуль 01</span>
         <h1 data-edit="standards.title">Стандарты сервиса SUBCLEAN</h1>
         <p class="lede" data-edit="standards.lede">Прежде чем взять в руки микрофибру, важно понять, где вы работаете и почему у нас всё устроено именно так. Этот модуль — о компании, о наших отличиях от обычного клининга и о том, что клиент на самом деле покупает.</p>
       </div>
@@ -959,7 +968,7 @@
     <!-- ============ 02 PROCESS ============ -->
     <section class="panel" id="panel-process">
       <div class="panel-head">
-        <span class="eyebrow">Модуль 02</span>
+        <span class="eyebrow" data-mod-eyebrow="process">Модуль 02</span>
         <h1 data-edit="process.title">Как проходит уборка</h1>
         <p class="lede" data-edit="process.lede">Каждая уборка строится по единым правилам — от согласования заказа до финальной проверки результата. Здесь — состав команды, типы уборок и подробный разбор всех четырёх этапов работы.</p>
       </div>
@@ -1039,7 +1048,7 @@
     <!-- ============ 03 SURFACES ============ -->
     <section class="panel" id="panel-surfaces">
       <div class="panel-head">
-        <span class="eyebrow">Модуль 03</span>
+        <span class="eyebrow" data-mod-eyebrow="surfaces">Модуль 03</span>
         <h1 data-edit="surfaces.title">Поверхности и уход за ними</h1>
         <p class="lede" data-edit="surfaces.lede">Главный риск на премиум-объекте — не грязь, а неверно подобранная химия или техника. Ошибка на мраморе или латуни необратима. Этот модуль — про материалы, типы загрязнений и общие правила, а затем — карточка по каждой поверхности.</p>
       </div>
@@ -1217,7 +1226,7 @@
     <!-- ============ 04 CHEMISTRY ============ -->
     <section class="panel" id="panel-chemistry">
       <div class="panel-head">
-        <span class="eyebrow">Модуль 04</span>
+        <span class="eyebrow" data-mod-eyebrow="chemistry">Модуль 04</span>
         <h1 data-edit="chemistry.title">Химия и оборудование</h1>
         <p class="lede" data-edit="chemistry.lede">Основа арсенала — немецкая профессиональная химия Buzil (бренд с 1907 года), а также Kiehl и Unger. Правильный класс средства — половина результата. Вторая половина — техника нанесения, оборудование и безопасность.</p>
       </div>
@@ -1328,7 +1337,7 @@
     <!-- ============ 05 REGULATIONS ============ -->
     <section class="panel" id="panel-rules">
       <div class="panel-head">
-        <span class="eyebrow">Модуль 05</span>
+        <span class="eyebrow" data-mod-eyebrow="rules">Модуль 05</span>
         <h1 data-edit="rules.title">Регламенты компании</h1>
         <p class="lede" data-edit="rules.lede">Эти правила — не прихоть компании. Они обеспечивают высокий уровень сервиса и выполнение обязательств перед клиентом. Нарушение регламентов создаёт для компании репутационные и финансовые риски, а для SUBCLEAN клиентский опыт критичен.</p>
       </div>
@@ -1414,7 +1423,7 @@
     <!-- ============ 06 TEST ============ -->
     <section class="panel" id="panel-test">
       <div class="panel-head">
-        <span class="eyebrow">Модуль 06</span>
+        <span class="eyebrow" data-mod-eyebrow="test">Модуль 06</span>
         <h1 data-edit="test.title">Тест на аттестацию</h1>
         <p class="lede" data-edit="test.lede">Финальная проверка знаний по всем модулям. Ответьте на все вопросы и нажмите «Проверить». Для успешной аттестации нужно набрать не менее 80% правильных ответов. После этого можно выходить на первый заказ.</p>
       </div>
@@ -1489,6 +1498,26 @@
       <div style="margin-left:auto;display:flex;gap:10px;flex-wrap:wrap">
         <button type="button" class="btn secondary" id="users-cancel">Отмена</button>
         <button type="button" class="btn" id="users-save">Сохранить</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="tabs-modal" hidden>
+  <div class="modal">
+    <div class="modal-head">
+      <h2>Вкладки обучения</h2>
+      <button type="button" class="modal-close" id="tabs-modal-close" aria-label="Закрыть">✕</button>
+    </div>
+    <div class="modal-body">
+      <p class="users-note">Меняйте порядок стрелками, скрывайте стандартные разделы или добавляйте свои вкладки. Тест всегда остаётся последним. Название вкладки меняется в режиме «Редактировать контент».</p>
+      <div id="tabs-list"></div>
+    </div>
+    <div class="modal-foot">
+      <button type="button" class="btn secondary" id="tabs-add">+ Добавить вкладку</button>
+      <div style="margin-left:auto;display:flex;gap:10px;flex-wrap:wrap">
+        <button type="button" class="btn secondary" id="tabs-cancel">Отмена</button>
+        <button type="button" class="btn" id="tabs-save">Сохранить</button>
       </div>
     </div>
   </div>
